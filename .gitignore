@@ -1,0 +1,7 @@
+# 真实密钥永远不进 git（本地这份是占位符，部署时在 master 上改成真 key）
+deploy/01-secret.yaml
+
+__pycache__/
+*.pyc
+.env
+*.tar
