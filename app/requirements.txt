@@ -2,3 +2,6 @@ fastapi
 uvicorn[standard]
 openai
 pydantic
+pymysql
+redis
+qdrant-client

@@ -3,8 +3,17 @@ kind: Deployment
 metadata:
   name: kaiops-chat
   namespace: kaiops
+  annotations:
+    kubernetes.io/change-cause: "v0.3: RAG 知识库问答(/ask_docs) + Qdrant"
 spec:
   replicas: 2
+  # 【面试考点】默认 RollingUpdate：maxSurge/maxUnavailable 各 25%。
+  # 2 副本时 = 最多先多起 1 个新 Pod、最多同时少 1 个可用旧 Pod，保证不断流。
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: kaiops-chat
@@ -13,24 +22,70 @@ spec:
       labels:
         app: kaiops-chat
     spec:
+      # 【面试考点】关掉 K8s 对 Service 环境变量的自动注入（docker-link 遗留机制）。
+      # 应用发现服务一律走 DNS（mysql.kaiops.svc.cluster.local），不依赖这些变量。
+      enableServiceLinks: false
       containers:
         - name: chat
-          image: docker.io/library/kaiops-chat:v0.1
+          image: docker.io/library/kaiops-chat:v0.3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
+          env:
+            - name: MYSQL_HOST
+              value: mysql # 同命名空间内 Service 名，DNS: mysql.kaiops.svc.cluster.local
+            - name: REDIS_HOST
+              value: redis
+            - name: QDRANT_HOST
+              value: qdrant
+            # embedding 走硅基流动的 OpenAI 兼容接口（bge-m3，免费额度）
+            - name: EMBED_BASE_URL
+              value: https://api.siliconflow.cn/v1
+            - name: EMBED_MODEL
+              value: BAAI/bge-m3
+            # 【面试考点】secretKeyRef 按 key 精确映射：
+            # mysql-secret 里的 MYSQL_ROOT_PASSWORD → 注入为 MYSQL_PASSWORD
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_ROOT_PASSWORD
           envFrom:
             - secretRef:
-                name: llm-secret
+                name: llm-secret # 提供 LLM_API_KEY 和 EMBED_API_KEY 两个键
+          # 【面试考点】两个探针分工：
+          # readiness 不过 → Pod 不进 Service endpoints（摘流量）；
+          # liveness 不过 → 容器被重启（自愈）。
+          # 滚动更新的"不断流"靠的是前者。
           readinessProbe:
             httpGet:
               path: /healthz
               port: 8000
             initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            periodSeconds: 10
+            failureThreshold: 3
+          # 【面试考点】零停机的最后一块拼图：Pod 被杀前先 sleep 10 秒，
+          # 等 kube-proxy 把 iptables 规则同步完（endpoint 传播有秒级延迟），
+          # 否则会有瞬间的连接打到已死 Pod（探针表现为 code=000）。
+          # SIGTERM 同时发给 uvicorn，它会把在途请求处理完再退出。
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "10"]
           resources:
             requests:
               cpu: 100m
               memory: 128Mi
             limits:
-              cpu: 500m
+              # 【面试考点】limit 从 500m 提到 1 核：CFS 配额太紧会造成节流毛刺
+              # （每 100ms 只给 50ms CPU），是尾延迟的经典来源
+              cpu: "1"
               memory: 512Mi
+      # 【面试考点】优雅终止的总预算（默认 30s，显式写出意图）：
+      # preStop sleep 10s + uvicorn 处理在途请求的时间，超时才被 SIGKILL
+      terminationGracePeriodSeconds: 30

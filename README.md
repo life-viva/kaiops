@@ -22,7 +22,9 @@
 - [x] **Day 1~2**：三节点集群底座（Rocky 10 ×3，静态 IP、主机名、时间同步、免密 SSH）
 - [x] **Day 3**：kubeadm 搭建 v1.34 集群 + Flannel（[踩坑实录](docs/day3-k8s-pitfalls.md)）
 - [x] **Day 4~5**：AI 对话应用容器化部署，NodePort 30080 对外服务（[部署记录](docs/day4-app-deployment.md)）
-- [ ] **Week 2（进行中）**：存储/MySQL/Redis → 应用 v0.2 接中间件 → RAG → Ingress
+- [x] **Day 6~7**：MySQL 对话历史 + Redis 会话缓存 + 零停机/回滚实战（[实验全记录](docs/day7-zero-downtime.md)）
+- [ ] **Day 8（进行中）**：RAG——Qdrant 向量库 + embedding + `/ask_docs` 知识库问答
+- [ ] **Day 9**：ingress-nginx + 域名 chat.kaiops.local
 - [ ] **Week 3**：kube-prometheus-stack 监控 + 自定义 exporter
 - [ ] **Week 4+**：GitLab CI + Harbor + Argo CD（GitOps）
 - [ ] **Month 2**：AIOps 告警分析机器人
